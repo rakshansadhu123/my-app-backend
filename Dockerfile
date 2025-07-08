@@ -17,7 +17,7 @@ RUN useradd --user-group --create-home --shell /bin/false appuser
 USER appuser
 
 # Expose the port the app runs on
-EXPOSE 3001
+EXPOSE 8080
 
 # Start the server
 CMD ["npm", "start"] 
