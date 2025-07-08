@@ -250,5 +250,5 @@ app.post('/api/mmm/proxy', async (req, res) => {
 
 
 // --- SERVER START ---
-const PORT = process.env.PORT || 3001; // Using 3001 to avoid common conflicts with frontend dev servers
+const PORT = process.env.PORT || 8080; // Using 8080 to avoid common conflicts with frontend dev servers
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
