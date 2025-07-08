@@ -247,6 +247,60 @@ app.post('/api/mmm/proxy', async (req, res) => {
         res.status(500).json({ error: 'Failed to proxy request to MMM service.', details: error.message });
     }
 });
+// --- 6. FULL USER DELETE ENDPOINT (with Stripe cancel and Supabase Auth delete) ---
+app.delete('/api/user/delete', async (req, res) => {
+  // Authenticate user via Supabase JWT
+  const user = await getSupabaseUser(req, res);
+  if (!user) return;
+
+  try {
+    // 1. Fetch user profile to get subscription_id and stripe_customer_id
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('subscription_id, stripe_customer_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
+
+    // 2. Cancel Stripe subscription if exists and is active
+    if (profile.subscription_id) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(profile.subscription_id);
+        if (subscription && subscription.status !== 'canceled' && subscription.status !== 'incomplete_expired') {
+          await stripe.subscriptions.cancel(profile.subscription_id);
+        }
+      } catch (stripeErr) {
+        // Log but do not block user deletion (maybe subscription was already canceled)
+        console.error('Error canceling Stripe subscription:', stripeErr.message);
+      }
+    }
+
+    // 3. Delete user profile from user_profiles
+    const { error: deleteProfileError } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', user.id);
+    if (deleteProfileError) {
+      return res.status(500).json({ error: 'Failed to delete user profile.', details: deleteProfileError.message });
+    }
+
+    // 4. Delete the user from Supabase Auth
+    try {
+      await supabase.auth.admin.deleteUser(user.id);
+    } catch (authErr) {
+      // Log but do not block response (user profile is already deleted)
+      console.error('Error deleting user from Supabase Auth:', authErr.message);
+    }
+
+    return res.status(200).json({ message: 'User and associated subscription deleted successfully.' });
+  } catch (err) {
+    console.error('Error deleting user:', err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
 
 
 // --- SERVER START ---
